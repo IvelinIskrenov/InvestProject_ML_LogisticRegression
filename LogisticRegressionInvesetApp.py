@@ -1,6 +1,10 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from datetime import date
 
 class DataHandler:
     '''
@@ -89,3 +93,102 @@ class DataHandler:
         #remove NaNs that might have appeared from shift functions after feat. creat.
         self.df.dropna(inplace=True)
         return self.df
+    
+class LogisticRegressionModel:
+    '''
+    Training and testing a model with an expanding window (evaluates its performance on a subsequent, fixed-size window)
+    Uses past data to retrain it!!!
+    '''
+
+    def __init__(self, data_df, features_list, target_col, train_window, predict_window):
+        '''
+        Set up for model
+            data_df        - All the data we've prepared with our indicators
+            features_list  - The list of column names the model will look at to learn
+            target_col     - The name of the column the model is trying to predict
+            train_window   - How many days of past data the model will use to train
+            predict_window - How many days into the future it will try to predict
+        '''
+        self.data_df = data_df.copy()
+        self.features_list = features_list
+        self.target_col = target_col
+        self.train_window = train_window
+        self.predict_window = predict_window
+        self.predictions = pd.DataFrame()
+        #avoid re-creation
+        self.model = Pipeline([
+            ('scaler', StandardScaler()),
+            ('clf', LogisticRegression(solver='saga', max_iter=2000, C=1))
+        ])
+
+    def run_training_and_prediction(self):
+        '''
+        Trains the model on past data and predicts the future - uses a "rolling window"
+        '''
+        print("Starting exp.window training...")
+        
+        n = len(self.data_df)
+        start_idx = self.train_window
+        
+        while start_idx < n:
+            end_idx = min(start_idx + self.predict_window, n)
+            
+            train_df = self.data_df.iloc[:start_idx]
+            test_df = self.data_df.iloc[start_idx:end_idx]
+            
+            X_train = train_df[self.features_list]
+            y_train = train_df[self.target_col]
+            X_test = test_df[self.features_list]
+            y_test = test_df[self.target_col]
+            
+            self.model.fit(X_train, y_train)
+            
+            y_prob = self.model.predict_proba(X_test)[:, 1]
+            
+            temp_results = pd.DataFrame({
+                'prob': y_prob,
+                'actual': y_test.values
+            }, index=test_df.index)
+            self.predictions = pd.concat([self.predictions, temp_results])
+            
+            #print(f"Processed data up to {test_df.index[-1].strftime('%Y-%m-%d')}")
+            
+            start_idx = end_idx
+            
+if __name__ == '__main__':
+    # 1. Parameters
+    TICKER = "META" # APPL, MSFT, ...
+    START = "2020-01-01"
+    END = date.today().strftime("%Y-%m-%d") 
+    TARGET_PCT = 0.02
+    HORIZON = 30
+    FEATURES = ['r1', 'r2', 'r3', 'ma5_20', 'vol10', 'momentum10', 'rsi14']
+
+    #params for roll training
+    TRAIN_WINDOW_SIZE = 500
+    PREDICT_WINDOW_SIZE = 20 # 20 to 60?
+
+    try:
+        #Data processing
+        data_processor = DataHandler(
+            ticker = TICKER,
+            start = START,
+            end = END,
+            target_pct = TARGET_PCT,
+            horizon = HORIZON
+        )
+        df = data_processor.get_processed_data()
+        
+        print(df.sample(5))
+        #Expanding window training and prediction
+        roller = LogisticRegressionModel(
+            data_df = df,
+            features_list = FEATURES,
+            target_col = 'target',
+            train_window = TRAIN_WINDOW_SIZE,
+            predict_window = PREDICT_WINDOW_SIZE
+        )
+        roller.run_training_and_prediction()
+        
+    except Exception as e:
+        print(f"An error occurred: {e}")    
