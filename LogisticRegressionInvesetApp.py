@@ -178,6 +178,27 @@ class LogisticRegressionModel:
         print("Confusion Matrix:\n", conf_matrix)
         
         return y_prob, y_test
+    
+class BuySellSimulator:
+    '''
+    Class for simulating a trading strategy and evaluating its performance
+    Executes a buy simulation based on the model's predictions
+    '''
+
+    def __init__(self, data_df, y_prob, horizon, target_pct, target_col):
+        '''
+        set up for Simulator
+            data_df    - all of our processed data
+            y_prob     - the model's prediction probabilities
+            horizon    - how many days to check for a winning trade
+            target_pct - the profit goal we're testing
+            target_col - the name of our target column
+        '''
+        #chech that df and y_prob have the same indices
+        self.data_df = data_df.loc[y_prob.index]
+        self.y_prob = y_prob
+        self.horizon = horizon
+        self.target_pct = target_pct
             
 if __name__ == '__main__':
     # 1. Parameters
