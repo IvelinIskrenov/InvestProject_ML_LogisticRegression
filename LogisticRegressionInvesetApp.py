@@ -5,6 +5,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from datetime import date
+from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix
 
 class DataHandler:
     '''
@@ -155,6 +156,29 @@ class LogisticRegressionModel:
             
             start_idx = end_idx
             
+    def evaluate(self):
+        """
+        Evaluates the collected predictions.
+        """
+        if self.predictions.empty:
+            print("No predictions collected. Please run run_training_and_prediction() first.")
+            return
+
+        print("\nEvaluating collected predictions...")
+        y_prob = self.predictions['prob']
+        y_test = self.predictions['actual']
+        y_pred = (y_prob > 0.5).astype(int)
+
+        roc_auc = roc_auc_score(y_test, y_prob)
+        accuracy = accuracy_score(y_test, y_pred)
+        conf_matrix = confusion_matrix(y_test, y_pred)
+
+        print(f"ROC AUC: {roc_auc:.4f}")
+        print(f"Accuracy: {accuracy:.4f}")
+        print("Confusion Matrix:\n", conf_matrix)
+        
+        return y_prob, y_test
+            
 if __name__ == '__main__':
     # 1. Parameters
     TICKER = "META" # APPL, MSFT, ...
@@ -189,6 +213,7 @@ if __name__ == '__main__':
             predict_window = PREDICT_WINDOW_SIZE
         )
         roller.run_training_and_prediction()
+        roller.evaluate()
         
     except Exception as e:
         print(f"An error occurred: {e}")    
