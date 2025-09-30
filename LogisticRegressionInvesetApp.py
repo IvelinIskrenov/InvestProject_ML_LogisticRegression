@@ -199,6 +199,75 @@ class BuySellSimulator:
         self.y_prob = y_prob
         self.horizon = horizon
         self.target_pct = target_pct
+        
+def run_backtest(self, threshold=0.5, transaction_cost=0.001):
+        '''
+        Executes the strategy simulation - threshold && transaction_cost
+        '''
+        print("\nRunning backtest...")
+        rets = []
+        wins = 0
+        trades = 0
+
+        #looping through each day in the test set
+        for idx in range(len(self.data_df)):
+            prob = self.y_prob.iloc[idx]
+            
+            #Enter a trade only if the probability is above the threshold
+            if prob <= threshold:
+                continue
+            
+            #Enter on the Open of the next day
+            entry_idx = idx + 1
+            if entry_idx >= len(self.data_df):
+                continue
+            
+            entry_price = float(self.data_df.iloc[entry_idx]['Open'])
+            if np.isnan(entry_price) or np.isinf(entry_price):
+                continue
+            
+            #Look for an exit price (profit or stop-loss)
+            hit = False
+            hit_price = None
+            for d in range(1, self.horizon + 1):
+                check_idx = entry_idx + d - 1
+                if check_idx >= len(self.data_df):
+                    break
+                    
+                high = float(self.data_df.iloc[check_idx]['High'])
+                if high >= entry_price * (1 + self.target_pct):
+                    hit_price = entry_price * (1 + self.target_pct)
+                    hit = True
+                    break
+            
+            #Calculating   the return
+            if hit:
+                realized_return = (hit_price / entry_price - 1) - 2 * transaction_cost
+                wins += 1
+            else:
+                exit_idx = min(entry_idx + self.horizon - 1, len(self.data_df) - 1)
+                exit_price = float(self.data_df.iloc[exit_idx]['Close'])
+                realized_return = (exit_price / entry_price - 1) - 2 * transaction_cost
+                
+            trades += 1
+            rets.append(realized_return)
+
+        if trades == 0:
+            return {"trades": 0, "message": "No trades were made at this threshold."}
+
+        #Collect the results
+        rets = np.array(rets)
+        avg_return = rets.mean()
+        cumulative_return = (1 + rets).prod()
+        sharpe = avg_return / (rets.std() + 1e-9) * np.sqrt(252) if rets.std() > 0 else 0
+        
+        return {
+            "trades": trades,
+            "win_rate": wins / trades,
+            "avg_return_per_trade": avg_return * 100,
+            "cumulative_return": cumulative_return,
+            "sharpe_ratio": sharpe
+        }
             
 if __name__ == '__main__':
     # 1. Parameters
