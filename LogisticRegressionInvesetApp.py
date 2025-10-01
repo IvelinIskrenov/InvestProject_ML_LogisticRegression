@@ -7,6 +7,10 @@ from sklearn.pipeline import Pipeline
 from datetime import date
 from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix
 
+#STANDERTIZE ?
+#check samples !
+
+
 class DataHandler:
     '''
     Class for downloading financial data and generating technical indicators && Processing the data.
@@ -200,7 +204,7 @@ class BuySellSimulator:
         self.horizon = horizon
         self.target_pct = target_pct
         
-def run_backtest(self, threshold=0.5, transaction_cost=0.001):
+    def run_backtest(self, threshold=0.5, transaction_cost=0.001):
         '''
         Executes the strategy simulation - threshold && transaction_cost
         '''
@@ -286,6 +290,20 @@ class InteractivePredictor:
         self.data = full_data.copy()
         self.features_list = features_list
         self.horizon = horizon 
+        
+    def predict_for_today(self, target_pct_final):
+        '''
+        Forecasts the next 5 days.
+            arg: target_pct_final (float): The percentage gain we're trying to predict.
+        '''
+        #Take - today's date (last row)
+        X_predict = self.data.iloc[-1][self.features_list].to_frame().T
+
+        y_prob = self.model.predict_proba(X_predict)[:, 1][0]
+
+        prediction_result = "Yes" if y_prob >= 0.5 else "No"
+        
+        return y_prob, prediction_result
             
 if __name__ == '__main__':
     # 1. Parameters
@@ -323,5 +341,47 @@ if __name__ == '__main__':
         roller.run_training_and_prediction()
         roller.evaluate()
         
+        print(df.sample(100))
+        
+        #Strategy testing
+        backtester = BuySellSimulator(
+            data_df = df,
+            y_prob = roller.predictions['prob'],
+            horizon = HORIZON,
+            target_pct = TARGET_PCT,
+            target_col = 'target'
+        )
+        backtest_results = backtester.run_backtest(threshold=0.5)
+
+        print("\n--- Backtest Results ---")
+        if backtest_results.get("trades", 0) > 0:
+            print(f"Total trades: {backtest_results['trades']}")
+            print(f"Win Rate: {backtest_results['win_rate']:.4f}")
+            print(f"Average return per trade: {backtest_results['avg_return_per_trade']:.4f}")
+            print(f"Total cumulative return: {backtest_results['cumulative_return']:.4f}")
+            print(f"Annualized Sharpe Ratio: {backtest_results['sharpe_ratio']:.4f}")
+        else:
+            print(backtest_results["message"])
+
+        print("\n--- Forecast for the next 5 days ---")
+        last_trained_model = roller.model
+        
+        # Use the last trained model for prediction
+        predictor = InteractivePredictor(
+            trained_model = last_trained_model,
+            full_data = df,
+            features_list = FEATURES,
+            horizon = HORIZON
+        )
+
+        #Predict for today's date with the parameters the model was trained with (5 days and 2%)
+        prob, result = predictor.predict_for_today(TARGET_PCT)
+
+        print(f"The model is trained to predict for {HORIZON} days and a {TARGET_PCT*100:.2f}% gain.")
+        print(f"The forecast for the next {HORIZON} days is:")
+        print(f"-> Will a {TARGET_PCT*100:.2f}% gain be achieved? {result}")
+        print(f"-> Prediction value (probability): {prob:.4f}")
+        
     except Exception as e:
         print(f"An error occurred: {e}")    
+        
