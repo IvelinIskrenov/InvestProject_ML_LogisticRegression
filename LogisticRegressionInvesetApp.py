@@ -268,6 +268,24 @@ def run_backtest(self, threshold=0.5, transaction_cost=0.001):
             "cumulative_return": cumulative_return,
             "sharpe_ratio": sharpe
         }
+ 
+class InteractivePredictor:
+    '''
+    Class for interactive prediction based on a trained model - (Allows the user to input horizon and percentage)
+    '''
+
+    def __init__(self, trained_model, full_data, features_list, horizon):
+        '''
+        set up :
+            trained_model: The model ready to make predictions.
+            full_data: All of our processed data.
+            features_list: The names of the columns the model uses.
+            horizon: How many days the model was trained to predict.
+        '''
+        self.model = trained_model
+        self.data = full_data.copy()
+        self.features_list = features_list
+        self.horizon = horizon 
             
 if __name__ == '__main__':
     # 1. Parameters
