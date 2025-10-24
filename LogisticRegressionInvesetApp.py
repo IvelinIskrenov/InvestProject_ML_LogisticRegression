@@ -114,7 +114,7 @@ class LogisticRegressionModel:
             train_window   - How many days of past data the model will use to train
             predict_window - How many days into the future it will try to predict
         '''
-        self.data_df = data_df.copy()
+        self.data_df = data_df
         self.features_list = features_list
         self.target_col = target_col
         self.train_window = train_window
@@ -126,10 +126,15 @@ class LogisticRegressionModel:
             ('clf', LogisticRegression(solver='saga', max_iter=2000, C=1))
         ])
 
+    def load_data(self):
+        data = DataHandler() 
+        self.data_df = data.get_processed_data()
+        
     def data_analysis(self):
         print("Describe data: ")
-        #print(self.data_df.describe())
+        print(self.data_df.describe())
         print("Data info: ")
+        print(self.data_df.info())
     
     def run_training_and_prediction(self):
         '''
@@ -343,6 +348,8 @@ if __name__ == '__main__':
             train_window = TRAIN_WINDOW_SIZE,
             predict_window = PREDICT_WINDOW_SIZE
         )
+        roller.data_analysis()
+        
         roller.run_training_and_prediction()
         roller.evaluate()
         
