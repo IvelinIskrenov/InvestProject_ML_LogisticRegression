@@ -126,6 +126,11 @@ class LogisticRegressionModel:
             ('clf', LogisticRegression(solver='saga', max_iter=2000, C=1))
         ])
 
+    def data_analysis(self):
+        print("Describe data: ")
+        #print(self.data_df.describe())
+        print("Data info: ")
+    
     def run_training_and_prediction(self):
         '''
         Trains the model on past data and predicts the future - uses a "rolling window"
@@ -161,9 +166,9 @@ class LogisticRegressionModel:
             start_idx = end_idx
             
     def evaluate(self):
-        """
+        '''
         Evaluates the collected predictions.
-        """
+        '''
         if self.predictions.empty:
             print("No predictions collected. Please run run_training_and_prediction() first.")
             return
