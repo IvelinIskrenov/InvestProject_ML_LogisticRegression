@@ -6,12 +6,9 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-from datetime import date
-from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix
-
-#STANDERTIZE ?
-#check samples !
-
+from datetime import date, datetime
+from sklearn.metrics import roc_auc_score, accuracy_score, confusion_matrix, precision_score
+from datetime import datetime
 
 class DataHandler:
     '''
@@ -107,7 +104,7 @@ class LogisticRegressionModel:
     Uses past data to retrain it!!!
     '''
 
-    def __init__(self, data_df, train_window, predict_window, n_splits = 5): # features_list, target_col,
+    def __init__(self, data_df, n_splits = 5): # features_list, target_col, train_window, predict_window,
         '''
         Set up for model
             data_df        - All the data we've prepared with our indicators
@@ -120,14 +117,18 @@ class LogisticRegressionModel:
         self.n_splits = n_splits
         self.features_list = None
         self.target_col = None
-        self.train_window = train_window
-        self.predict_window = predict_window
+        #self.train_window = train_window
+        #self.predict_window = predict_window
         self.predictions = pd.DataFrame()
         #avoid re-creation
         self.model = Pipeline([
             ('scaler', StandardScaler()),
             ('clf', LogisticRegression(solver='saga', max_iter=2000, C=1))
         ])
+        self.X_train = None
+        self.X_test = None 
+        self.y_train = None 
+        self.y_test = None
 
     def load_data(self):
         data = DataHandler() 
@@ -171,15 +172,15 @@ class LogisticRegressionModel:
         
         print(f"----------------")
         print(f"X : ")
-        print(self.features_list)
+        print(X)
         
         print(f"y : ")
-        print(self.features_list)
+        print(y)
         print(f"----------------")
         for train_index, test_index in tscv.split(X):
-            X_train, X_test = X.iloc[train_index], X.iloc[test_index]
-            y_train, y_test = y.iloc[train_index], y.iloc[test_index]
-            yield X_train, X_test, y_train, y_test
+            self.X_train, self.X_test = X.iloc[train_index], X.iloc[test_index]
+            self.y_train, self.y_test = y.iloc[train_index], y.iloc[test_index]
+            yield self.X_train, self.X_test, self.y_train, self.y_test
 
     def run_training_and_prediction(self):
         '''
@@ -191,27 +192,32 @@ class LogisticRegressionModel:
         print("Starting TimeSeriesSplit training...")
         all_predictions = []
 
-        for i, (X_train, X_test, y_train, y_test) in enumerate(self.time_series_split_data(), 1):
-            print(f"Fold {i}: train up to {X_train.index[-1].strftime('%Y-%m-%d')}, "
-                  f"test from {X_test.index[0].strftime('%Y-%m-%d')} to {X_test.index[-1].strftime('%Y-%m-%d')}")
+        for i, (self.X_train, self.X_test, self.y_train, self.y_test) in enumerate(self.time_series_split_data(), 1):
+            print(f"Fold {i}: train up to {self.X_train.index[-1].strftime('%Y-%m-%d')}, "
+                  f"test from {self.X_test.index[0].strftime('%Y-%m-%d')} to {self.X_test.index[-1].strftime('%Y-%m-%d')}")
             
-            self.model.fit(X_train, y_train)
-            y_prob = self.model.predict_proba(X_test)[:, 1]
+            self.model.fit(self.X_train, self.y_train)
+            y_prob = self.model.predict_proba(self.X_test)[:, 1]
 
             fold_predictions = pd.DataFrame({
                 'prob': y_prob,
-                'actual': y_test.values
-            }, index=X_test.index)
+                'actual': self.y_test.values
+            }, index=self.X_test.index)
             all_predictions.append(fold_predictions)
 
         self.predictions = pd.concat(all_predictions)
         print("Training complete. Predictions collected for evaluation.")
+        
+        #print(f"Predictions -> ")
+        #print(self.predictions)
+    
+    #def time_series_cross_validation(self):
+        
             
     def evaluate(self):
         '''
         Evaluates the collected predictions.
         '''
-        # Precision - FP are expensive
         if self.predictions.empty:
             print("No predictions collected. Please run run_training_and_prediction() first.")
             return
@@ -223,13 +229,20 @@ class LogisticRegressionModel:
 
         roc_auc = roc_auc_score(y_test, y_prob)
         accuracy = accuracy_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred, zero_division=0)
         conf_matrix = confusion_matrix(y_test, y_pred)
 
-        print(f"ROC AUC: {roc_auc:.4f}")
-        print(f"Accuracy: {accuracy:.4f}")
+        print(f"ROC AUC:   {roc_auc:.4f}")
+        print(f"Accuracy:  {accuracy:.4f}")
+        print(f"Precision: {precision:.4f}")
         print("Confusion Matrix:\n", conf_matrix)
-        
-        return y_prob, y_test
+
+        return {
+            "roc_auc": roc_auc,
+            "accuracy": accuracy,
+            "precision": precision,
+            "confusion_matrix": conf_matrix
+        }
     
 class BuySellSimulator:
     '''
@@ -356,11 +369,11 @@ class InteractivePredictor:
 if __name__ == '__main__':
     # 1. Parameters
     TICKER = "META" # APPL, MSFT, ...
-    START = "2020-01-01"
+    START = "2015-01-01"
     END = date.today().strftime("%Y-%m-%d") 
     TARGET_PCT = 0.02
     HORIZON = 30
-    FEATURES = ['r1', 'r2', 'r3', 'ma5_20', 'vol10', 'momentum10', 'rsi14']
+    #FEATURES = ['r1', 'r2', 'r3', 'ma5_20', 'vol10', 'momentum10', 'rsi14']
 
     #params for roll training
     TRAIN_WINDOW_SIZE = 500
@@ -381,17 +394,19 @@ if __name__ == '__main__':
         #Expanding window training and prediction
         roller = LogisticRegressionModel(
             data_df = df,
-            features_list = FEATURES,
-            target_col = 'target',
-            train_window = TRAIN_WINDOW_SIZE,
-            predict_window = PREDICT_WINDOW_SIZE
+            n_splits = 50 
+            #features_list = FEATURES,
+            #target_col = 'target',
+            #train_window = TRAIN_WINDOW_SIZE,
+            #predict_window = PREDICT_WINDOW_SIZE
         )
+        roller.preprocessing()
         roller.data_analysis()
         
         roller.run_training_and_prediction()
         roller.evaluate()
         
-        print(df.sample(100))
+        #print(df.sample(100))
         
         print(f"----------------------------------------------------")
         print(f"----------------------------------------------------")
@@ -426,7 +441,7 @@ if __name__ == '__main__':
         predictor = InteractivePredictor(
             trained_model = last_trained_model,
             full_data = df,
-            features_list = FEATURES,
+            features_list = roller.features_list,
             horizon = HORIZON
         )
 
