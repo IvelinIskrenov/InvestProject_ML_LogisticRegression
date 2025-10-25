@@ -1,7 +1,8 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import matplotlib as plt
+import matplotlib.pyplot as plt
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
@@ -106,7 +107,7 @@ class LogisticRegressionModel:
     Uses past data to retrain it!!!
     '''
 
-    def __init__(self, data_df, features_list, target_col, train_window, predict_window):
+    def __init__(self, data_df, train_window, predict_window, n_splits = 5): # features_list, target_col,
         '''
         Set up for model
             data_df        - All the data we've prepared with our indicators
@@ -116,8 +117,9 @@ class LogisticRegressionModel:
             predict_window - How many days into the future it will try to predict
         '''
         self.data_df = data_df
-        self.features_list = features_list
-        self.target_col = target_col
+        self.n_splits = n_splits
+        self.features_list = None
+        self.target_col = None
         self.train_window = train_window
         self.predict_window = predict_window
         self.predictions = pd.DataFrame()
@@ -130,6 +132,10 @@ class LogisticRegressionModel:
     def load_data(self):
         data = DataHandler() 
         self.data_df = data.get_processed_data()
+    
+    def preprocessing(self):
+        self.features_list = [col for col in self.data_df.columns if col != 'target']
+        self.target_col = 'target'
         
     def data_analysis(self):
         '''Describe data, info and see the correlations between the data'''
@@ -139,6 +145,11 @@ class LogisticRegressionModel:
         print("Data info: ")
         print(self.data_df.info())
         
+        print(f"Total samples: {len(self.data_df)}")
+        print(f"Number features: {len(self.features_list)}")
+        print(f"Shape of data: {self.data_df.shape}")
+        
+        
         corr = self.data_df.corr()
         
         #to see the correclation between data
@@ -147,7 +158,29 @@ class LogisticRegressionModel:
         plt.show()
         
         #abs(correlation_values).sort_values(ascending=False)[:10] #!!!
-    
+        
+    def time_series_split_data(self):
+        '''
+            Splits the data into consecutive train/test selections
+            using sklearn.model_selection.TimeSeriesSplit.
+            Returns a generator of (X_train, X_test, y_train, y_test).
+        '''
+        tscv = TimeSeriesSplit(n_splits=self.n_splits)
+        X = self.data_df[self.features_list]
+        y = self.data_df[self.target_col]
+        
+        print(f"----------------")
+        print(f"X : ")
+        print(self.features_list)
+        
+        print(f"y : ")
+        print(self.features_list)
+        print(f"----------------")
+        for train_index, test_index in tscv.split(X):
+            X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+            y_train, y_test = y.iloc[train_index], y.iloc[test_index]
+            yield X_train, X_test, y_train, y_test
+
     def run_training_and_prediction(self):
         '''
         Trains the model on past data and predicts the future - uses a "rolling window"
@@ -155,37 +188,24 @@ class LogisticRegressionModel:
         #Calculate prediction error (cost function)
         #Update teta to reduce prediction error
         #Repeat until - reach samll log-loss value or target number of iterations  / Can try Gradient D.
-        
-        
-        print("Starting exp.window training...")
-        
-        n = len(self.data_df)
-        start_idx = self.train_window
-        
-        while start_idx < n:
-            end_idx = min(start_idx + self.predict_window, n)
-            
-            train_df = self.data_df.iloc[:start_idx]
-            test_df = self.data_df.iloc[start_idx:end_idx]
-            
-            X_train = train_df[self.features_list]
-            y_train = train_df[self.target_col]
-            X_test = test_df[self.features_list]
-            y_test = test_df[self.target_col]
+        print("Starting TimeSeriesSplit training...")
+        all_predictions = []
+
+        for i, (X_train, X_test, y_train, y_test) in enumerate(self.time_series_split_data(), 1):
+            print(f"Fold {i}: train up to {X_train.index[-1].strftime('%Y-%m-%d')}, "
+                  f"test from {X_test.index[0].strftime('%Y-%m-%d')} to {X_test.index[-1].strftime('%Y-%m-%d')}")
             
             self.model.fit(X_train, y_train)
-            
             y_prob = self.model.predict_proba(X_test)[:, 1]
-            
-            temp_results = pd.DataFrame({
+
+            fold_predictions = pd.DataFrame({
                 'prob': y_prob,
                 'actual': y_test.values
-            }, index=test_df.index)
-            self.predictions = pd.concat([self.predictions, temp_results])
-            
-            #print(f"Processed data up to {test_df.index[-1].strftime('%Y-%m-%d')}")
-            
-            start_idx = end_idx
+            }, index=X_test.index)
+            all_predictions.append(fold_predictions)
+
+        self.predictions = pd.concat(all_predictions)
+        print("Training complete. Predictions collected for evaluation.")
             
     def evaluate(self):
         '''
@@ -372,6 +392,12 @@ if __name__ == '__main__':
         roller.evaluate()
         
         print(df.sample(100))
+        
+        print(f"----------------------------------------------------")
+        print(f"----------------------------------------------------")
+        print(f"----------------------------------------------------")
+        print(f"----------------------------------------------------")
+        print(f"----------------------------------------------------")
         
         #Strategy testing
         backtester = BuySellSimulator(
