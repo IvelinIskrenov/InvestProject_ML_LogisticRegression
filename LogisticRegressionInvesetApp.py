@@ -1,6 +1,7 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import matplotlib as plt
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
@@ -131,15 +132,31 @@ class LogisticRegressionModel:
         self.data_df = data.get_processed_data()
         
     def data_analysis(self):
+        '''Describe data, info and see the correlations between the data'''
+        print(f"Data analysis started ...")
         print("Describe data: ")
         print(self.data_df.describe())
         print("Data info: ")
         print(self.data_df.info())
+        
+        corr = self.data_df.corr()
+        
+        #to see the correclation between data
+        correlation_values = self.data_df.corr()['target'].drop('target')
+        correlation_values.plot(kind="barh",figsize=(10, 6))
+        plt.show()
+        
+        #abs(correlation_values).sort_values(ascending=False)[:10] #!!!
     
     def run_training_and_prediction(self):
         '''
         Trains the model on past data and predicts the future - uses a "rolling window"
         '''
+        #Calculate prediction error (cost function)
+        #Update teta to reduce prediction error
+        #Repeat until - reach samll log-loss value or target number of iterations  / Can try Gradient D.
+        
+        
         print("Starting exp.window training...")
         
         n = len(self.data_df)
@@ -174,6 +191,7 @@ class LogisticRegressionModel:
         '''
         Evaluates the collected predictions.
         '''
+        # Precision - FP are expensive
         if self.predictions.empty:
             print("No predictions collected. Please run run_training_and_prediction() first.")
             return
